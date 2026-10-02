@@ -1,172 +1,239 @@
-using System;
-using System.Collections.Generic;
 using System.Data;
-using Microsoft.Data.SqlClient;
+using System.Data.SqlClient;
 
-namespace CampusEventSystem.Backend
+namespace CampusEvents.Backend
 {
-    // --- Data Models matching the Frontend API Payload ---
+    // ---------- DTOs (property names match what index.html sends/reads) ----------
+    public record RegistrationRequest(int EventId, string StudentId, string FullName, string Email);
 
-    public class RegistrationRequest
+    public record AttendeeDto(string StudentId, string FullName, string Email, DateTime RegistrationDate);
+
+    public record ServiceResult(bool Success, int StatusCode, string Message)
     {
-        public int EventId { get; set; }
-        public string StudentId { get; set; } = string.Empty;
-        public string FullName { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
+        public static ServiceResult Ok(int code, string message) => new(true, code, message);
+        public static ServiceResult Fail(int code, string message) => new(false, code, message);
     }
 
-    public class AttendeeDto
-    {
-        public string StudentId { get; set; } = string.Empty;
-        public string FullName { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public DateTime RegistrationDate { get; set; }
-    }
-
-    public class ValidationResult
-    {
-        public bool IsValid { get; set; }
-        public string ErrorMessage { get; set; } = string.Empty;
-    }
-
-    // --- Database Repository Interface ---
-
+    // ---------- Data access contract (mocked in unit tests) ----------
     public interface IEventRepository
     {
-        bool IsEventFull(int eventId);
-        bool IsStudentAlreadyRegistered(int eventId, string email);
+        bool EventExists(int eventId);
+        int GetRemainingSeats(int eventId);
+        bool IsAlreadyRegistered(int eventId, string email);
+        void AddRegistration(RegistrationRequest request);
+        IReadOnlyList<AttendeeDto> GetAttendees(int eventId);
+        string? GetUserRegistration(string inputEmail);
     }
 
-    // --- Validation Logic ---
-
+    // ---------- Validation rules ----------
     public class RegistrationValidator
     {
-        private readonly IEventRepository _repository;
-        private const string RequiredDomain = "@univ.edu.ph";
+        private const string AllowedDomain = "@univ.edu.ph";
+        private readonly IEventRepository _repo;
 
-        public RegistrationValidator(IEventRepository repository)
+        public RegistrationValidator(IEventRepository repo) => _repo = repo;
+
+        public bool IsValidStudentEmail(string? email)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            if (string.IsNullOrWhiteSpace(email)) return false;
+            string e = email.Trim();
+            return e.EndsWith(AllowedDomain, StringComparison.OrdinalIgnoreCase)
+                && e.Length > AllowedDomain.Length
+                && e.Count(c => c == '@') == 1;
         }
 
-        public ValidationResult ValidateRegistration(int eventId, string email)
+        public ServiceResult Validate(int eventId, string? email)
         {
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "Email cannot be empty." };
-            }
-
-            if (!email.EndsWith(RequiredDomain, StringComparison.OrdinalIgnoreCase))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "Email must belong to @univ.edu.ph." };
-            }
-
-            if (_repository.IsEventFull(eventId))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "Event has reached maximum seat capacity." };
-            }
-
-            if (_repository.IsStudentAlreadyRegistered(eventId, email))
-            {
-                return new ValidationResult { IsValid = false, ErrorMessage = "Student is already registered for this event." };
-            }
-
-            return new ValidationResult { IsValid = true };
+            if (!IsValidStudentEmail(email))
+                return ServiceResult.Fail(400, "Email must be a valid @univ.edu.ph address.");
+            if (!_repo.EventExists(eventId))
+                return ServiceResult.Fail(404, "Event not found.");
+            if (_repo.IsAlreadyRegistered(eventId, email!.Trim()))
+                return ServiceResult.Fail(409, "You are already registered for this event.");
+            if (_repo.GetRemainingSeats(eventId) <= 0)
+                return ServiceResult.Fail(409, "Sorry, this event is full.");
+            return ServiceResult.Ok(200, "Valid");
         }
     }
 
-    // --- Core Backend Service Layer ---
-
+    // ---------- Business logic ----------
     public class RegistrationService
+    {
+        private readonly IEventRepository _repo;
+        private readonly RegistrationValidator _validator;
+
+        public RegistrationService(IEventRepository repo, RegistrationValidator validator)
+        {
+            _repo = repo;
+            _validator = validator;
+        }
+
+        public ServiceResult Register(RegistrationRequest? request)
+        {
+            if (request is null
+                || string.IsNullOrWhiteSpace(request.StudentId)
+                || string.IsNullOrWhiteSpace(request.FullName))
+                return ServiceResult.Fail(400, "Event ID, Student ID, Full Name and Email are required.");
+
+            var check = _validator.Validate(request.EventId, request.Email);
+            if (!check.Success) return check;
+
+            _repo.AddRegistration(request with
+            {
+                StudentId = request.StudentId.Trim(),
+                FullName = request.FullName.Trim(),
+                Email = request.Email.Trim()
+            });
+            return ServiceResult.Ok(201, "Registration successful!");
+        }
+
+        // Returns null when the event does not exist (controller maps this to 404).
+        public IReadOnlyList<AttendeeDto>? GetAttendees(int eventId) =>
+            _repo.EventExists(eventId) ? _repo.GetAttendees(eventId) : null;
+
+        public string? GetUserRegistration(string inputEmail) => _repo.GetUserRegistration(inputEmail);
+    }
+
+    // ---------- SQL Server implementation: parameterized queries + using disposal ----------
+    // NOTE: table/column names assume Users, Events, Registrations. Adjust to your /database/schema.sql.
+    public class SqlEventRepository : IEventRepository
     {
         private readonly string _connectionString;
 
-        public RegistrationService(string connectionString)
+        public SqlEventRepository(string connectionString)
         {
-            _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("Connection string is required.", nameof(connectionString));
+            _connectionString = connectionString;
         }
 
-        // Endpoint Support: Handles POST /api/registrations
-        public bool RegisterStudent(RegistrationRequest request)
+        public bool EventExists(int eventId)
         {
-            if (request == null || string.IsNullOrWhiteSpace(request.Email))
-            {
-                return false;
-            }
-
-            const string insertQuery = @"
-                INSERT INTO Registrations (EventId, StudentId, FullName, Email, RegistrationDate)
-                VALUES (@EventId, @StudentId, @FullName, @Email, @RegistrationDate);";
-
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            using (SqlCommand cmd = new SqlCommand(insertQuery, conn))
-            {
-                cmd.Parameters.Add("@EventId", SqlDbType.Int).Value = request.EventId;
-                cmd.Parameters.Add("@StudentId", SqlDbType.VarChar, 50).Value = request.StudentId;
-                cmd.Parameters.Add("@FullName", SqlDbType.VarChar, 100).Value = request.FullName;
-                cmd.Parameters.Add("@Email", SqlDbType.VarChar, 255).Value = request.Email;
-                cmd.Parameters.Add("@RegistrationDate", SqlDbType.DateTime).Value = DateTime.UtcNow;
-
-                conn.Open();
-                int rowsAffected = cmd.ExecuteNonQuery();
-                return rowsAffected > 0;
-            }
+            const string sql = "SELECT COUNT(1) FROM Events WHERE EventId = @EventId";
+            using var conn = new SqlConnection(_connectionString);
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.Add("@EventId", SqlDbType.Int).Value = eventId;
+            conn.Open();
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
-        // Endpoint Support: Handles GET /api/events/{eventId}/attendees
-        public List<AttendeeDto> GetAttendeesByEvent(int eventId)
+        public int GetRemainingSeats(int eventId)
         {
-            var attendees = new List<AttendeeDto>();
+            const string sql = @"SELECT e.Capacity - COUNT(r.RegistrationId)
+                                 FROM Events e
+                                 LEFT JOIN Registrations r ON r.EventId = e.EventId
+                                 WHERE e.EventId = @EventId
+                                 GROUP BY e.Capacity";
+            using var conn = new SqlConnection(_connectionString);
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.Add("@EventId", SqlDbType.Int).Value = eventId;
+            conn.Open();
+            object? result = cmd.ExecuteScalar();
+            return result is null ? 0 : Convert.ToInt32(result);
+        }
 
-            const string query = @"
-                SELECT StudentId, FullName, Email, RegistrationDate 
-                FROM Registrations 
-                WHERE EventId = @EventId 
-                ORDER BY RegistrationDate ASC;";
+        public bool IsAlreadyRegistered(int eventId, string email)
+        {
+            const string sql = @"SELECT COUNT(1)
+                                 FROM Registrations r
+                                 INNER JOIN Users u ON u.UserId = r.UserId
+                                 WHERE r.EventId = @EventId AND u.Email = @Email";
+            using var conn = new SqlConnection(_connectionString);
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.Add("@EventId", SqlDbType.Int).Value = eventId;
+            cmd.Parameters.Add("@Email", SqlDbType.NVarChar, 255).Value = email;
+            conn.Open();
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
 
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            using (SqlCommand cmd = new SqlCommand(query, conn))
+        public void AddRegistration(RegistrationRequest request)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            conn.Open();
+            using var tx = conn.BeginTransaction();
+            try
             {
-                cmd.Parameters.Add("@EventId", SqlDbType.Int).Value = eventId;
+                int userId;
 
-                conn.Open();
-                using (SqlDataReader reader = cmd.ExecuteReader())
+                using (var find = new SqlCommand(
+                    "SELECT UserId FROM Users WHERE StudentId = @StudentId", conn, tx))
                 {
-                    while (reader.Read())
+                    find.Parameters.Add("@StudentId", SqlDbType.NVarChar, 50).Value = request.StudentId;
+                    object? existing = find.ExecuteScalar();
+
+                    if (existing is not null)
                     {
-                        attendees.Add(new AttendeeDto
-                        {
-                            StudentId = reader["StudentId"].ToString() ?? string.Empty,
-                            FullName = reader["FullName"].ToString() ?? string.Empty,
-                            Email = reader["Email"].ToString() ?? string.Empty,
-                            RegistrationDate = Convert.ToDateTime(reader["RegistrationDate"])
-                        });
+                        userId = Convert.ToInt32(existing);
+                    }
+                    else
+                    {
+                        using var insertUser = new SqlCommand(
+                            @"INSERT INTO Users (StudentId, FullName, Email)
+                              OUTPUT INSERTED.UserId
+                              VALUES (@StudentId, @FullName, @Email)", conn, tx);
+                        insertUser.Parameters.Add("@StudentId", SqlDbType.NVarChar, 50).Value = request.StudentId;
+                        insertUser.Parameters.Add("@FullName", SqlDbType.NVarChar, 150).Value = request.FullName;
+                        insertUser.Parameters.Add("@Email", SqlDbType.NVarChar, 255).Value = request.Email;
+                        userId = Convert.ToInt32(insertUser.ExecuteScalar());
                     }
                 }
-            }
 
-            return attendees;
+                using (var insertReg = new SqlCommand(
+                    "INSERT INTO Registrations (EventId, UserId) VALUES (@EventId, @UserId)", conn, tx))
+                {
+                    insertReg.Parameters.Add("@EventId", SqlDbType.Int).Value = request.EventId;
+                    insertReg.Parameters.Add("@UserId", SqlDbType.Int).Value = userId;
+                    insertReg.ExecuteNonQuery();
+                }
+
+                tx.Commit();
+            }
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
         }
 
-        // Refactored legacy method fixing SQL Injection, Resource Leaks, and Null Exceptions
-        public string GetUserRegistration(string inputEmail)
+        public IReadOnlyList<AttendeeDto> GetAttendees(int eventId)
+        {
+            const string sql = @"SELECT u.StudentId, u.FullName, u.Email, r.RegistrationDate
+                                 FROM Registrations r
+                                 INNER JOIN Users u ON u.UserId = r.UserId
+                                 WHERE r.EventId = @EventId
+                                 ORDER BY r.RegistrationDate";
+            var list = new List<AttendeeDto>();
+            using var conn = new SqlConnection(_connectionString);
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.Add("@EventId", SqlDbType.Int).Value = eventId;
+            conn.Open();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                list.Add(new AttendeeDto(
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetDateTime(3)));
+            }
+            return list;
+        }
+
+        // Refactored from the Task 4 flawed snippet:
+        // parameterized query, 'using' disposal, null-safe result, no SELECT * with ExecuteScalar.
+        public string? GetUserRegistration(string inputEmail)
         {
             if (string.IsNullOrWhiteSpace(inputEmail))
+                throw new ArgumentException("Email is required.", nameof(inputEmail));
+
+            const string sql = @"SELECT TOP 1 r.RegistrationId
+                                 FROM Registrations r
+                                 INNER JOIN Users u ON u.UserId = r.UserId
+                                 WHERE u.Email = @Email";
+
+            using (var conn = new SqlConnection(_connectionString))
+            using (var cmd = new SqlCommand(sql, conn))
             {
-                return string.Empty;
-            }
-
-            const string query = "SELECT RegistrationId FROM Registrations WHERE Email = @Email";
-
-            using (SqlConnection conn = new SqlConnection(_connectionString))
-            using (SqlCommand cmd = new SqlCommand(query, conn))
-            {
-                cmd.Parameters.Add("@Email", SqlDbType.VarChar, 255).Value = inputEmail;
-
+                cmd.Parameters.Add("@Email", SqlDbType.NVarChar, 255).Value = inputEmail;
                 conn.Open();
-                object result = cmd.ExecuteScalar();
-
-                return result != null ? result.ToString() : string.Empty;
+                return cmd.ExecuteScalar()?.ToString();
             }
         }
     }

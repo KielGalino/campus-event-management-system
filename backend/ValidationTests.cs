@@ -1,109 +1,102 @@
-using System;
-using Xunit;
+using CampusEvents.Backend;
 using Moq;
-using CampusEventSystem.Backend;
+using Xunit;
 
-namespace CampusEventSystem.Tests
+namespace CampusEvents.Tests
 {
     public class ValidationTests
     {
-        private readonly Mock<IEventRepository> _mockRepo;
-        private readonly RegistrationValidator _validator;
+        private readonly Mock<IEventRepository> _repo = new();
+        private RegistrationValidator Validator() => new(_repo.Object);
 
-        public ValidationTests()
+        private void Arrange(bool eventExists = true, bool alreadyRegistered = false, int seats = 5)
         {
-            _mockRepo = new Mock<IEventRepository>();
-            _validator = new RegistrationValidator(_mockRepo.Object);
-        }
-
-        [Fact]
-        public void ValidateRegistration_ValidEmailAndAvailableSeats_ReturnsSuccess()
-        {
-            // Arrange
-            int eventId = 101;
-            string validEmail = "20241001@univ.edu.ph";
-
-            _mockRepo.Setup(r => r.IsEventFull(eventId)).Returns(false);
-            _mockRepo.Setup(r => r.IsStudentAlreadyRegistered(eventId, validEmail)).Returns(false);
-
-            // Act
-            ValidationResult result = _validator.ValidateRegistration(eventId, validEmail);
-
-            // Assert
-            Assert.True(result.IsValid);
-            Assert.Empty(result.ErrorMessage);
+            _repo.Setup(r => r.EventExists(1)).Returns(eventExists);
+            _repo.Setup(r => r.IsAlreadyRegistered(1, It.IsAny<string>())).Returns(alreadyRegistered);
+            _repo.Setup(r => r.GetRemainingSeats(1)).Returns(seats);
         }
 
         [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        [InlineData("   ")]
-        public void ValidateRegistration_NullOrEmptyEmail_ReturnsFailure(string invalidEmail)
+        [InlineData("juan@univ.edu.ph", true)]
+        [InlineData("JUAN@UNIV.EDU.PH", true)]
+        [InlineData("juan@gmail.com", false)]
+        [InlineData("@univ.edu.ph", false)]
+        [InlineData("juan@univ.edu.ph.evil.com", false)]
+        [InlineData("a@b@univ.edu.ph", false)]
+        [InlineData("", false)]
+        [InlineData(null, false)]
+        public void IsValidStudentEmail_ChecksDomain(string? email, bool expected)
+            => Assert.Equal(expected, Validator().IsValidStudentEmail(email));
+
+        [Fact]
+        public void Validate_SeatsAvailable_Succeeds()
         {
-            // Arrange
-            int eventId = 101;
-
-            // Act
-            ValidationResult result = _validator.ValidateRegistration(eventId, invalidEmail);
-
-            // Assert
-            Assert.False(result.IsValid);
-            Assert.Equal("Email cannot be empty.", result.ErrorMessage);
-            _mockRepo.Verify(r => r.IsEventFull(It.IsAny<int>()), Times.Never);
-        }
-
-        [Theory]
-        [InlineData("student@gmail.com")]
-        [InlineData("student@univ.edu")]
-        [InlineData("student@otheruniv.edu.ph.com")]
-        public void ValidateRegistration_WrongDomain_ReturnsFailure(string wrongDomainEmail)
-        {
-            // Arrange
-            int eventId = 101;
-
-            // Act
-            ValidationResult result = _validator.ValidateRegistration(eventId, wrongDomainEmail);
-
-            // Assert
-            Assert.False(result.IsValid);
-            Assert.Equal("Email must belong to @univ.edu.ph.", result.ErrorMessage);
-            _mockRepo.Verify(r => r.IsEventFull(It.IsAny<int>()), Times.Never);
+            Arrange();
+            Assert.True(Validator().Validate(1, "a@univ.edu.ph").Success);
         }
 
         [Fact]
-        public void ValidateRegistration_EventIsFull_ReturnsFailure()
+        public void Validate_EventFull_Returns409()
         {
-            // Arrange
-            int eventId = 101;
-            string validEmail = "student@univ.edu.ph";
-
-            _mockRepo.Setup(r => r.IsEventFull(eventId)).Returns(true);
-
-            // Act
-            ValidationResult result = _validator.ValidateRegistration(eventId, validEmail);
-
-            // Assert
-            Assert.False(result.IsValid);
-            Assert.Equal("Event has reached maximum seat capacity.", result.ErrorMessage);
-            _mockRepo.Verify(r => r.IsStudentAlreadyRegistered(It.IsAny<int>(), It.IsAny<string>()), Times.Never);
+            Arrange(seats: 0);
+            var result = Validator().Validate(1, "a@univ.edu.ph");
+            Assert.False(result.Success);
+            Assert.Equal(409, result.StatusCode);
         }
 
         [Fact]
-        public void ValidateRegistration_AlreadyRegistered_ReturnsFailure()
+        public void Validate_AlreadyRegistered_Returns409()
         {
-            // Arrange
-            int eventId = 101;
-            string validEmail = "student@univ.edu.ph";
+            Arrange(alreadyRegistered: true);
+            Assert.Equal(409, Validator().Validate(1, "a@univ.edu.ph").StatusCode);
+        }
 
-            _mockRepo.Setup(r => r.IsEventFull(eventId)).Returns(false);
-            _mockRepo.Setup(r => r.IsStudentAlreadyRegistered(eventId, validEmail)).Returns(true);
+        [Fact]
+        public void Validate_UnknownEvent_Returns404()
+        {
+            Arrange(eventExists: false);
+            Assert.Equal(404, Validator().Validate(1, "a@univ.edu.ph").StatusCode);
+        }
 
-            // Act
-            ValidationResult result = _validator.ValidateRegistration(eventId, validEmail);
+        [Fact]
+        public void Validate_InvalidEmail_Returns400_AndNeverHitsDatabase()
+        {
+            var result = Validator().Validate(1, "a@gmail.com");
+            Assert.Equal(400, result.StatusCode);
+            _repo.Verify(r => r.EventExists(It.IsAny<int>()), Times.Never);
+            _repo.Verify(r => r.GetRemainingSeats(It.IsAny<int>()), Times.Never);
+        }
 
-            // Assert
-            Assert.False(result.IsValid);
-            Assert.Equal("Student is already registered for this event.", result.ErrorMessage);
+        [Fact]
+        public void Register_ValidRequest_SavesOnce_AndReturns201()
+        {
+            Arrange();
+            var service = new RegistrationService(_repo.Object, Validator());
+
+            var result = service.Register(new RegistrationRequest(1, "2021-0001", "Juan Dela Cruz", "juan@univ.edu.ph"));
+
+            Assert.Equal(201, result.StatusCode);
+            _repo.Verify(r => r.AddRegistration(It.IsAny<RegistrationRequest>()), Times.Once);
+        }
+
+        [Fact]
+        public void Register_EventFull_DoesNotSave()
+        {
+            Arrange(seats: 0);
+            var service = new RegistrationService(_repo.Object, Validator());
+
+            var result = service.Register(new RegistrationRequest(1, "2021-0001", "Juan Dela Cruz", "juan@univ.edu.ph"));
+
+            Assert.Equal(409, result.StatusCode);
+            _repo.Verify(r => r.AddRegistration(It.IsAny<RegistrationRequest>()), Times.Never);
+        }
+
+        [Fact]
+        public void Register_MissingName_Returns400()
+        {
+            var service = new RegistrationService(_repo.Object, Validator());
+            var result = service.Register(new RegistrationRequest(1, "2021-0001", "  ", "juan@univ.edu.ph"));
+            Assert.Equal(400, result.StatusCode);
         }
     }
 }

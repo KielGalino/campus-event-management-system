@@ -18,61 +18,56 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 app.UseCors();
 
-// 1. Use a strongly-typed list to store EventId alongside attendee details
-var attendees = new List<RegistrationRecord> 
+// 1. Updated to use the renamed MockRegistrationRecord class
+var attendees = new List<MockRegistrationRecord> 
 {
-    new RegistrationRecord { 
+    new MockRegistrationRecord { 
         EventId = 1, 
         StudentId = 12345, 
         FullName = "John Doe", 
         Email = "johndoe@dlsud.edu.ph", 
-        // Generates a random date between 1 and 14 days ago for the mock data
         RegistrationDate = DateTime.Now.AddDays(new Random().Next(-14, -1)).ToString("yyyy-MM-dd") 
     }
 };
 
-// 2. Accept registrations and map the correct email property
-app.MapPost("/api/registrations", (RegistrationRequest req) => 
+// 2. Updated to use the renamed MockRegistrationRequest class
+app.MapPost("/api/registrations", (MockRegistrationRequest req) => 
 {
-    // Fallback logic: accepts either 'Email' or 'EmailAddress' from the frontend JSON
     string resolvedEmail = !string.IsNullOrEmpty(req.Email) ? req.Email : req.EmailAddress;
 
-    attendees.Add(new RegistrationRecord { 
+    attendees.Add(new MockRegistrationRecord { 
         EventId = req.EventId,
         StudentId = req.StudentId, 
         FullName = req.FullName, 
-        Email = resolvedEmail, // String data type naturally accepts any length/domain
+        Email = resolvedEmail,
         RegistrationDate = DateTime.Now.ToString("yyyy-MM-dd") 
     });
     
     return Results.Ok(new { message = "Registration successful" });
 });
 
-// 3. Filter attendees based on the requested Event ID from the search box
+// 3. Filter attendees
 app.MapGet("/api/events/{id}/attendees", (int id) => 
 {
-    // Only returns students whose EventId matches the administrator's search
     var filteredAttendees = attendees.Where(a => a.EventId == id).ToList();
     return Results.Ok(filteredAttendees);
 });
 
-// 4. Hardcoded port to ensure the frontend fetch commands never break
+// 4. Hardcoded port
 app.Run("http://localhost:5140");
 
-// --- DATA MODELS ---
+// --- RENAMED DATA MODELS TO AVOID TEAM CONFLICTS ---
 
-// Defines the expected incoming JSON structure from the frontend
-public class RegistrationRequest
+public class MockRegistrationRequest
 {
     public int EventId { get; set; }
     public int StudentId { get; set; }
     public string FullName { get; set; }
     public string EmailAddress { get; set; }
-    public string Email { get; set; } // Added to catch varying JSON payload keys
+    public string Email { get; set; } 
 }
 
-// Defines the structure of the data stored in the server's memory
-public class RegistrationRecord
+public class MockRegistrationRecord
 {
     public int EventId { get; set; }
     public int StudentId { get; set; }
