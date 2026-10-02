@@ -80,68 +80,69 @@
 </head>
 <body>
 
-<div class="container">
+<main class="container">
     <!-- Student Registration Interface -->
-    <div class="card">
-        <h2>Student Event Registration</h2>
-        <div id="regAlert" class="alert"></div>
+    <section class="card" aria-labelledby="student-heading">
+        <h2 id="student-heading">Student Event Registration</h2>
+        <div id="regAlert" class="alert" role="alert"></div>
         <form id="registrationForm">
             <div class="form-group">
                 <label for="eventId">Event ID</label>
-                <input type="number" id="eventId" name="eventId" required>
+                <input type="number" id="eventId" name="eventId" aria-label="Event ID" required>
             </div>
             <div class="form-group">
                 <label for="studentId">Student ID</label>
-                <input type="text" id="studentId" name="studentId" required>
+                <input type="text" id="studentId" name="studentId" aria-label="Student ID" required>
             </div>
             <div class="form-group">
                 <label for="fullName">Full Name</label>
-                <input type="text" id="fullName" name="fullName" required>
+                <input type="text" id="fullName" name="fullName" aria-label="Full Name" required>
             </div>
             <div class="form-group">
                 <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" required>
+                <input type="email" id="email" name="email" aria-label="Email Address" required>
             </div>
             <button type="submit">Register for Event</button>
         </form>
-    </div>
+    </section>
 
     <!-- Administrator Attendee Viewer -->
-    <div class="card">
-        <h2>Administrator: View Attendees</h2>
+    <section class="card" aria-labelledby="admin-heading">
+        <h2 id="admin-heading">Administrator: View Attendees</h2>
         <div class="form-group">
             <label for="adminEventId">Enter Event ID</label>
             <div style="display: flex; gap: 10px;">
-                <input type="number" id="adminEventId" placeholder="e.g., 101">
-                <button id="btnLoadAttendees">View Attendees</button>
+                <input type="number" id="adminEventId" aria-label="Enter Event ID" placeholder="e.g., 101">
+                <button id="btnLoadAttendees" type="button">View Attendees</button>
             </div>
         </div>
-        <div id="adminAlert" class="alert"></div>
+        <div id="adminAlert" class="alert" role="alert"></div>
         <table>
             <thead>
                 <tr>
-                    <th>Student ID</th>
-                    <th>Full Name</th>
-                    <th>Email</th>
-                    <th>Registration Date</th>
+                    <th scope="col">Student ID</th>
+                    <th scope="col">Full Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Registration Date</th>
                 </tr>
             </thead>
             <tbody id="attendeeTableBody">
                 <!-- Rows injected via JavaScript -->
             </tbody>
         </table>
-    </div>
-</div>
+    </section>
+</main>
 
 <script>
+    const API_BASE_URL = 'http://localhost:5000';
+
     // --- 1. Student Event Registration Flow ---
     document.getElementById('registrationForm').addEventListener('submit', async (e) => {
-        e.preventDefault(); // Intercept form submission to prevent full-page reload
+        e.preventDefault();
         
         const alertBox = document.getElementById('regAlert');
         alertBox.style.display = 'none';
 
-        // Construct JSON payload
         const payload = {
             eventId: parseInt(document.getElementById('eventId').value),
             studentId: document.getElementById('studentId').value,
@@ -150,21 +151,30 @@
         };
 
         try {
-            // Dispatch POST request to the API
-            const response = await fetch('/api/registrations', {
+            const response = await fetch(`${API_BASE_URL}/api/registrations`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            if (response.status === 201) {
+            const rawText = await response.text();
+            let responseData = {};
+            
+            if (rawText) {
+                try {
+                    responseData = JSON.parse(rawText);
+                } catch {
+                    responseData = { message: rawText };
+                }
+            }
+
+            if (response.ok) {
                 alertBox.className = 'alert alert-success';
-                alertBox.innerText = 'Registration successful!';
+                alertBox.innerText = responseData.message || 'Registration successful!';
                 alertBox.style.display = 'block';
-                e.target.reset(); // Clear form on success
+                e.target.reset();
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Registration failed due to validation or capacity issues.');
+                throw new Error(responseData.message || 'Registration failed due to validation or capacity issues.');
             }
         } catch (error) {
             alertBox.className = 'alert alert-error';
@@ -179,7 +189,7 @@
         const tbody = document.getElementById('attendeeTableBody');
         const alertBox = document.getElementById('adminAlert');
         
-        tbody.innerHTML = ''; // Clear existing table rows in the DOM
+        tbody.innerHTML = '';
         alertBox.style.display = 'none';
 
         if (!eventId) {
@@ -190,12 +200,23 @@
         }
 
         try {
-            // Dispatch GET request for specific event attendees
-            const response = await fetch(`/api/events/${eventId}/attendees`);
-            
-            if (!response.ok) throw new Error('Failed to load attendees. Check Event ID.');
-            
-            const attendees = await response.json();
+            const response = await fetch(`${API_BASE_URL}/api/events/${eventId}/attendees`);
+            const rawText = await response.text();
+
+            if (!response.ok) {
+                let errorMsg = 'Failed to load attendees. Check Event ID.';
+                if (rawText) {
+                    try {
+                        const parsed = JSON.parse(rawText);
+                        errorMsg = parsed.message || errorMsg;
+                    } catch {
+                        errorMsg = rawText;
+                    }
+                }
+                throw new Error(errorMsg);
+            }
+
+            const attendees = rawText ? JSON.parse(rawText) : [];
 
             if (attendees.length === 0) {
                 alertBox.className = 'alert alert-success';
@@ -204,7 +225,6 @@
                 return;
             }
 
-            // Iterate through the collection and inject <tr> elements
             attendees.forEach(student => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
