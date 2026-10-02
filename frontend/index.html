@@ -1,142 +1,391 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Campus Event Management</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
         :root {
-            --primary: #0056b3;
-            --bg-color: #f4f7f6;
-            --card-bg: #ffffff;
-            --text: #333333;
-            --border: #dddddd;
-            --success: #28a745;
-            --error: #dc3545;
+            /* Light Mode Variables */
+            --bg-main: #f8fafc;
+            --bg-card: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --input-bg: #f1f5f9;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success-bg: #dcfce7;
+            --success-text: #166534;
+            --error-bg: #fee2e2;
+            --error-text: #991b1b;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --radius: 12px;
+            --transition: all 0.3s ease;
         }
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text);
+
+        [data-theme="dark"] {
+            /* Dark Mode Variables */
+            --bg-main: #0f172a;
+            --bg-card: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --input-bg: #0f172a;
+            --primary: #6366f1;
+            --primary-hover: #818cf8;
+            --success-bg: #052e16;
+            --success-text: #4ade80;
+            --error-bg: #450a0a;
+            --error-text: #f87171;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
             margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            padding: 0;
         }
-        .container {
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            transition: background-color var(--transition), color var(--transition);
+            line-height: 1.5;
+            padding: 2rem 1rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .layout-wrapper {
             width: 100%;
-            max-width: 800px;
+            max-width: 1000px;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 2rem;
         }
+
+        /* Header & Toggle */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        .theme-toggle {
+            background: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+        }
+
+        .theme-toggle:hover {
+            background: var(--input-bg);
+        }
+
+        /* Dashboard Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr 1.5fr;
+            }
+        }
+
+        /* Cards */
         .card {
-            background: var(--card-bg);
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--bg-card);
+            padding: 2rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        h2 { margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
         input {
             width: 100%;
-            padding: 10px;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            box-sizing: border-box;
+            padding: 0.75rem 1rem;
+            background-color: var(--input-bg);
+            border: 1px solid transparent;
+            color: var(--text-main);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: var(--transition);
+            outline: none;
         }
-        button {
+
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+            background-color: var(--bg-card);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* Buttons */
+        button[type="submit"], #btnLoadAttendees {
+            width: 100%;
             background-color: var(--primary);
             color: white;
             border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
-            font-size: 16px;
+            transition: var(--transition);
         }
-        button:hover { background-color: #004494; }
+
+        #btnLoadAttendees {
+            width: auto;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-        }
-        th, td {
-            padding: 12px;
-            border: 1px solid var(--border);
             text-align: left;
         }
-        th { background-color: #f8f9fa; }
-        .alert {
-            padding: 10px;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            display: none;
+
+        th, td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
         }
-        .alert-success { background-color: #d4edda; color: var(--success); border: 1px solid #c3e6cb; }
-        .alert-error { background-color: #f8d7da; color: var(--error); border: 1px solid #f5c6cb; }
+
+        th {
+            background-color: var(--input-bg);
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr {
+            transition: background-color 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background-color: var(--input-bg);
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .alert-success {
+            background-color: var(--success-bg);
+            color: var(--success-text);
+            border: 1px solid currentColor;
+        }
+
+        .alert-error {
+            background-color: var(--error-bg);
+            color: var(--error-text);
+            border: 1px solid currentColor;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
 
-<main class="container">
-    <!-- Student Registration Interface -->
-    <section class="card" aria-labelledby="student-heading">
-        <h2 id="student-heading">Student Event Registration</h2>
-        <div id="regAlert" class="alert" role="alert"></div>
-        <form id="registrationForm">
-            <div class="form-group">
-                <label for="eventId">Event ID</label>
-                <input type="number" id="eventId" name="eventId" aria-label="Event ID" required>
-            </div>
-            <div class="form-group">
-                <label for="studentId">Student ID</label>
-                <input type="text" id="studentId" name="studentId" aria-label="Student ID" required>
-            </div>
-            <div class="form-group">
-                <label for="fullName">Full Name</label>
-                <input type="text" id="fullName" name="fullName" aria-label="Full Name" required>
-            </div>
-            <div class="form-group">
-                <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" aria-label="Email Address" required>
-            </div>
-            <button type="submit">Register for Event</button>
-        </form>
-    </section>
+<div class="layout-wrapper">
+    <header>
+        <h1>Campus Events</h1>
+        <button id="themeToggle" class="theme-toggle" aria-label="Toggle Dark Mode">
+            <span id="themeIcon">🌙</span> <span id="themeText">Dark Mode</span>
+        </button>
+    </header>
 
-    <!-- Administrator Attendee Viewer -->
-    <section class="card" aria-labelledby="admin-heading">
-        <h2 id="admin-heading">Administrator: View Attendees</h2>
-        <div class="form-group">
-            <label for="adminEventId">Enter Event ID</label>
-            <div style="display: flex; gap: 10px;">
-                <input type="number" id="adminEventId" aria-label="Enter Event ID" placeholder="e.g., 101">
-                <button id="btnLoadAttendees" type="button">View Attendees</button>
+    <main class="dashboard-grid">
+        <!-- Student Registration Interface -->
+        <section class="card" aria-labelledby="student-heading">
+            <h2 id="student-heading">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"></path></svg>
+                Register
+            </h2>
+            <div id="regAlert" class="alert" role="alert"></div>
+            <form id="registrationForm">
+                <div class="form-group">
+                    <label for="eventId">Event ID</label>
+                    <input type="number" id="eventId" name="eventId" aria-label="Event ID" required placeholder="e.g. 101">
+                </div>
+                <div class="form-group">
+                    <label for="studentId">Student ID</label>
+                    <input type="text" id="studentId" name="studentId" aria-label="Student ID" required placeholder="e.g. S-2026">
+                </div>
+                <div class="form-group">
+                    <label for="fullName">Full Name</label>
+                    <input type="text" id="fullName" name="fullName" aria-label="Full Name" required placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" aria-label="Email Address" required placeholder="student@campus.edu">
+                </div>
+                <button type="submit">Confirm Registration</button>
+            </form>
+        </section>
+
+        <!-- Administrator Attendee Viewer -->
+        <section class="card" aria-labelledby="admin-heading">
+            <h2 id="admin-heading">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                Attendee Roster
+            </h2>
+            <div class="form-group">
+                <label for="adminEventId">Lookup by Event ID</label>
+                <div class="input-group">
+                    <input type="number" id="adminEventId" aria-label="Enter Event ID" placeholder="Enter ID...">
+                    <button id="btnLoadAttendees" type="button">Load</button>
+                </div>
             </div>
-        </div>
-        <div id="adminAlert" class="alert" role="alert"></div>
-        <table>
-            <thead>
-                <tr>
-                    <th scope="col">Student ID</th>
-                    <th scope="col">Full Name</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Registration Date</th>
-                </tr>
-            </thead>
-            <tbody id="attendeeTableBody">
-                <!-- Rows injected via JavaScript -->
-            </tbody>
-        </table>
-    </section>
-</main>
+            <div id="adminAlert" class="alert" role="alert"></div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Student ID</th>
+                            <th scope="col">Full Name</th>
+                            <th scope="col">Email</th>
+                            <th scope="col">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendeeTableBody">
+                        <!-- Rows injected via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
 
 <script>
+    // --- Theme Toggle Logic ---
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeText = document.getElementById('themeText');
+    const htmlElement = document.documentElement;
+
+    // Check system preference or local storage
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+        htmlElement.setAttribute('data-theme', savedTheme);
+        updateToggleUI(savedTheme);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        htmlElement.setAttribute('data-theme', 'dark');
+        updateToggleUI('dark');
+    }
+
+    themeToggle.addEventListener('click', () => {
+        const currentTheme = htmlElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        htmlElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateToggleUI(newTheme);
+    });
+
+    function updateToggleUI(theme) {
+        if (theme === 'dark') {
+            themeIcon.textContent = '☀️';
+            themeText.textContent = 'Light Mode';
+        } else {
+            themeIcon.textContent = '🌙';
+            themeText.textContent = 'Dark Mode';
+        }
+    }
+
+    // --- API Logic (Untouched from original) ---
     const API_BASE_URL = 'http://localhost:5000';
 
-    // --- 1. Student Event Registration Flow ---
     document.getElementById('registrationForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -183,7 +432,6 @@
         }
     });
 
-    // --- 2. Administrator Attendee Retrieval Flow ---
     document.getElementById('btnLoadAttendees').addEventListener('click', async () => {
         const eventId = document.getElementById('adminEventId').value;
         const tbody = document.getElementById('attendeeTableBody');
