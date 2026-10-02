@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Event Management</title>
+    <style>
+        :root {
+            --primary: #0056b3;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text: #333333;
+            --border: #dddddd;
+            --success: #28a745;
+            --error: #dc3545;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 { margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover { background-color: #004494; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid var(--border);
+            text-align: left;
+        }
+        th { background-color: #f8f9fa; }
+        .alert {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .alert-success { background-color: #d4edda; color: var(--success); border: 1px solid #c3e6cb; }
+        .alert-error { background-color: #f8d7da; color: var(--error); border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Student Registration Interface -->
+    <div class="card">
+        <h2>Student Event Registration</h2>
+        <div id="regAlert" class="alert"></div>
+        <form id="registrationForm">
+            <div class="form-group">
+                <label for="eventId">Event ID</label>
+                <input type="number" id="eventId" name="eventId" required>
+            </div>
+            <div class="form-group">
+                <label for="studentId">Student ID</label>
+                <input type="text" id="studentId" name="studentId" required>
+            </div>
+            <div class="form-group">
+                <label for="fullName">Full Name</label>
+                <input type="text" id="fullName" name="fullName" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <button type="submit">Register for Event</button>
+        </form>
+    </div>
+
+    <!-- Administrator Attendee Viewer -->
+    <div class="card">
+        <h2>Administrator: View Attendees</h2>
+        <div class="form-group">
+            <label for="adminEventId">Enter Event ID</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="number" id="adminEventId" placeholder="e.g., 101">
+                <button id="btnLoadAttendees">View Attendees</button>
+            </div>
+        </div>
+        <div id="adminAlert" class="alert"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Full Name</th>
+                    <th>Email</th>
+                    <th>Registration Date</th>
+                </tr>
+            </thead>
+            <tbody id="attendeeTableBody">
+                <!-- Rows injected via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // --- 1. Student Event Registration Flow ---
+    document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+        e.preventDefault(); // Intercept form submission to prevent full-page reload
+        
+        const alertBox = document.getElementById('regAlert');
+        alertBox.style.display = 'none';
+
+        // Construct JSON payload
+        const payload = {
+            eventId: parseInt(document.getElementById('eventId').value),
+            studentId: document.getElementById('studentId').value,
+            fullName: document.getElementById('fullName').value,
+            email: document.getElementById('email').value
+        };
+
+        try {
+            // Dispatch POST request to the API
+            const response = await fetch('/api/registrations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 201) {
+                alertBox.className = 'alert alert-success';
+                alertBox.innerText = 'Registration successful!';
+                alertBox.style.display = 'block';
+                e.target.reset(); // Clear form on success
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Registration failed due to validation or capacity issues.');
+            }
+        } catch (error) {
+            alertBox.className = 'alert alert-error';
+            alertBox.innerText = error.message;
+            alertBox.style.display = 'block';
+        }
+    });
+
+    // --- 2. Administrator Attendee Retrieval Flow ---
+    document.getElementById('btnLoadAttendees').addEventListener('click', async () => {
+        const eventId = document.getElementById('adminEventId').value;
+        const tbody = document.getElementById('attendeeTableBody');
+        const alertBox = document.getElementById('adminAlert');
+        
+        tbody.innerHTML = ''; // Clear existing table rows in the DOM
+        alertBox.style.display = 'none';
+
+        if (!eventId) {
+            alertBox.className = 'alert alert-error';
+            alertBox.innerText = 'Please enter a valid Event ID.';
+            alertBox.style.display = 'block';
+            return;
+        }
+
+        try {
+            // Dispatch GET request for specific event attendees
+            const response = await fetch(`/api/events/${eventId}/attendees`);
+            
+            if (!response.ok) throw new Error('Failed to load attendees. Check Event ID.');
+            
+            const attendees = await response.json();
+
+            if (attendees.length === 0) {
+                alertBox.className = 'alert alert-success';
+                alertBox.innerText = 'No attendees registered for this event yet.';
+                alertBox.style.display = 'block';
+                return;
+            }
+
+            // Iterate through the collection and inject <tr> elements
+            attendees.forEach(student => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${student.studentId}</td>
+                    <td>${student.fullName}</td>
+                    <td>${student.email}</td>
+                    <td>${new Date(student.registrationDate).toLocaleDateString()}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            alertBox.className = 'alert alert-error';
+            alertBox.innerText = error.message;
+            alertBox.style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>
