@@ -1,55 +1,45 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using CampusEventSystem.Backend;
+using CampusEvents.Backend;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Configure CORS to allow requests from any frontend port (Live Server / static local files)
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+// Connection string comes from appsettings.json ("ConnectionStrings:CampusEvents")
+// or the environment variable ConnectionStrings__CampusEvents. Never hard-code it.
+string connectionString = builder.Configuration.GetConnectionString("CampusEvents")
+    ?? throw new InvalidOperationException("Missing connection string 'CampusEvents'.");
 
-// Register services
-string connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? "Server=(localdb)\\mssqllocaldb;Database=CampusEvents;Trusted_Connection=True;";
+builder.Services.AddSingleton<IEventRepository>(_ => new SqlEventRepository(connectionString));
+builder.Services.AddSingleton<RegistrationValidator>();
+builder.Services.AddSingleton<RegistrationService>();
 
-builder.Services.AddSingleton(new RegistrationService(connectionString));
+// index.html runs on a different origin than the API, so CORS must be enabled.
+builder.Services.AddCors(o => o.AddPolicy("Frontend", p =>
+    p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
 
-app.UseCors("AllowFrontend");
-
-// Endpoint 1: Student Event Registration (POST)
-app.MapPost("/api/registrations", (RegistrationRequest request, RegistrationService service) =>
+// Return a safe JSON error instead of leaking stack traces to the browser.
+app.UseExceptionHandler(errorApp => errorApp.Run(async ctx =>
 {
-    if (request == null || string.IsNullOrWhiteSpace(request.Email))
-    {
-        return Results.BadRequest(new { message = "Invalid registration data provided." });
-    }
+    ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await ctx.Response.WriteAsJsonAsync(new { message = "Unexpected server error. Please try again." });
+}));
 
-    bool success = service.RegisterStudent(request);
-    
-    if (!success)
-    {
-        return Results.BadRequest(new { message = "Registration failed. Verify student details or event status." });
-    }
+app.UseCors("Frontend");
 
-    return Results.Created($"/api/registrations/{request.StudentId}", new { message = "Registration successful!" });
+// POST /api/registrations  (called by the Student Registration form)
+app.MapPost("/api/registrations", (RegistrationRequest? request, RegistrationService service) =>
+{
+    ServiceResult result = service.Register(request);
+    return Results.Json(new { message = result.Message }, statusCode: result.StatusCode);
 });
 
-// Endpoint 2: Administrator Attendee Retrieval (GET)
-app.MapGet("/api/events/{eventId}/attendees", (int eventId, RegistrationService service) =>
+// GET /api/events/{eventId}/attendees  (called by the Administrator viewer)
+app.MapGet("/api/events/{eventId:int}/attendees", (int eventId, RegistrationService service) =>
 {
-    var attendees = service.GetAttendeesByEvent(eventId);
-    return Results.Ok(attendees);
+    var attendees = service.GetAttendees(eventId);
+    return attendees is null
+        ? Results.Json(new { message = "Event not found. Check Event ID." }, statusCode: 404)
+        : Results.Ok(attendees);
 });
 
-// Force API to run on localhost:5000
 app.Run("http://localhost:5000");
