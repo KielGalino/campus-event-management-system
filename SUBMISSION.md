@@ -151,5 +151,34 @@ This stack is selected specifically to minimize initial setup overhead, eliminat
 | **Data Tier** | **SQLite (`Microsoft.Data.Sqlite`)** | Fully self-contained, serverless, file-based relational database. Requires zero database server installation (unlike SQL Server, MySQL, or Postgres). The database lives directly as a local file, ensuring absolute portability across all team member clones. |
 | **Test Engine** | **xUnit (or NUnit) via .NET Test SDK** | Native integration with Visual Studio Test Explorer and the `dotnet test` CLI command. Allows instant execution of `ValidationTests.cs` without extra test framework configuration. |
 
+## Task 3: Visual ERD Deliverable using Mermaid.js code blocks
+
+erDiagram
+    USERS {
+        int UserID PK
+        varchar Email
+        varchar FirstName
+        varchar LastName
+        varchar UserRole
+    }
+    EVENTS {
+        int EventID PK
+        varchar EventName
+        varchar Description
+        datetime EventDate
+        int Capacity
+    }
+    REGISTRATIONS {
+        int RegistrationID PK
+        int UserID FK
+        int EventID FK
+        datetime RegistrationDate
+        varchar RegistrationStatus
+    }
+
+    USERS ||--o{ REGISTRATIONS : "initiates"
+    EVENTS ||--o{ REGISTRATIONS : "receives"
+
+
 ### 3. Manual Grounding Evaluation
 The proposed monolithic three-tier architecture is realistic and achievable for our undergraduate team within the 180-minute examination window. By choosing native HTML5, an ASP.NET Core Minimal API, and an embedded SQLite database, the system avoids complex configuration steps, external servers, and state management libraries like Redux. The design directly maps each system layer to our assigned repository files—namely `index.html`, `schema.sql`, `RegistrationService.cs`, and `ValidationTests.cs`—which allows all four members to build and verify their respective components concurrently. Furthermore, the inclusion of three clear relational tables (`Events`, `Students`, and `Registrations`) and standard unit testing demonstrates that the architecture fully satisfies the laboratory requirements without introducing unmanageable technical debt.
