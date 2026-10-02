@@ -349,42 +349,7 @@
 </div>
 
 <script>
-    // --- Theme Toggle Logic ---
-    const themeToggle = document.getElementById('themeToggle');
-    const themeIcon = document.getElementById('themeIcon');
-    const themeText = document.getElementById('themeText');
-    const htmlElement = document.documentElement;
-
-    // Check system preference or local storage
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-        htmlElement.setAttribute('data-theme', savedTheme);
-        updateToggleUI(savedTheme);
-    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        htmlElement.setAttribute('data-theme', 'dark');
-        updateToggleUI('dark');
-    }
-
-    themeToggle.addEventListener('click', () => {
-        const currentTheme = htmlElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-        htmlElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        updateToggleUI(newTheme);
-    });
-
-    function updateToggleUI(theme) {
-        if (theme === 'dark') {
-            themeIcon.textContent = '☀️';
-            themeText.textContent = 'Light Mode';
-        } else {
-            themeIcon.textContent = '🌙';
-            themeText.textContent = 'Dark Mode';
-        }
-    }
-
-    // --- API Logic (Untouched from original) ---
-    const API_BASE_URL = 'http://localhost:5000';
+    const API_BASE_URL = 'http://localhost:5140';
 
     document.getElementById('registrationForm').addEventListener('submit', async (e) => {
         e.preventDefault();
